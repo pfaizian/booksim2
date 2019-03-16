@@ -39,6 +39,25 @@
 #include "config_utils.hpp"
 
 typedef Channel<Credit> CreditChannel;
+struct RouterState
+{
+  Vector<int> queue_length;
+  int dst_grp;
+  bool operator<(const RouterState& rs) const
+  { 
+    vector<int>::iterator ptr, ptr1;
+
+    for(ptr = this.queue_length.begin(), ptr1 = rs.queue_length.begin(); 
+	/ptr < this.queue_length.end(); ptr++, ptr1++) {
+      if (*ptr < *ptr1)
+	return true;
+    }
+    if (this.dst_grp < rs.dst_group)
+      return true;
+
+    return false;
+  }
+};
 
 class Router : public TimedModule {
 
@@ -71,6 +90,7 @@ protected:
   vector<FlitChannel *>   _output_channels;
   vector<CreditChannel *> _output_credits;
   vector<bool>            _channel_faults;
+  map<RouterState, vector<int> > _qtable; 
 
 #ifdef TRACK_FLOWS
   vector<vector<int> > _received_flits;

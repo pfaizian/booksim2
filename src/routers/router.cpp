@@ -84,9 +84,32 @@ TimedModule( parent, name ), _id( id ), _inputs( inputs ), _outputs( outputs ),
   _buffer_reserved_stalls.resize(_classes, 0);
   _crossbar_conflict_stalls.resize(_classes, 0);
 #endif
-
+  
 }
 
+void Router::InitializeQtable(int radix, int port_bins, vector<int> thresholds )
+{
+  vector<RouterState> rs_full;
+
+  GenerateStates(&rs_full, radix - 1, port_bins);
+
+  for (RouterState state: rs_full)
+    for(int i = 0; i < thresholds.size(); i++) {
+      _qtable[state].push_back(thresholds[i]);
+    }
+}
+
+void Router::GenerateStatesRec(vector<RouterState> rs_full, RouterState cur, int end, int port_bins )
+{
+  if (end == 0) {
+    rs_full.push_back(cur);
+  }
+  
+  for(int i = 0; i < end; i++) {
+    
+  }
+    
+} 
 void Router::AddInputChannel( FlitChannel *channel, CreditChannel *backchannel )
 {
   _input_channels.push_back( channel );
