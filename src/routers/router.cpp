@@ -54,6 +54,8 @@ int const Router::STALL_BUFFER_CONFLICT = -3;
 int const Router::STALL_BUFFER_FULL = -4;
 int const Router::STALL_BUFFER_RESERVED = -5;
 int const Router::STALL_CROSSBAR_CONFLICT = -6;
+double const Router::RL_ALPHA = 0.1;
+double const Router::RL_GAMMA = 0.95;
 
 Router::Router( const Configuration& config,
 		Module *parent, const string & name, int id,
@@ -87,29 +89,117 @@ TimedModule( parent, name ), _id( id ), _inputs( inputs ), _outputs( outputs ),
   
 }
 
-void Router::InitializeQtable(int radix, int port_bins, vector<int> thresholds )
+int Router::ChooseAction(RouterState state) const
 {
-  vector<RouterState> rs_full;
+  double cur_max = _qtable[state][0];
+  int max_index = 0;
 
-  GenerateStates(&rs_full, radix - 1, port_bins);
+  for(unsigned int i = 0; i < _qtable[state].size(); i++)
+    {
+      if (_qtable[state][i] >= cur_max) 
+	{
+	  cur_max = _qtable[state][i];
+	  max_index = i;
+	}
+    }
+  return max_index;
+}
 
-  for (RouterState state: rs_full)
-    for(int i = 0; i < thresholds.size(); i++) {
-      _qtable[state].push_back(thresholds[i]);
+void Router::UpdateCurrentState() const
+{
+  cout << "cur_state: ";
+  for(int i = 0; i < _outputs; i++) {
+    cur_state.queue_length[i] = max(GetUsedCredit(i), 0) / 43;
+    cout << cur_state.queue_length[i] << ", ";
+  }
+  cout << endl;
+}
+
+void Router::UpdatePreviousState() const
+{
+  for (int i = 0; i < _outputs; i++)
+    {
+      prev_state.queue_length[i] = cur_state.queue_length[i];
     }
 }
 
-void Router::GenerateStatesRec(vector<RouterState> rs_full, RouterState cur, int end, int port_bins )
+double Router::LatencyInverse() const
 {
-  if (end == 0) {
-    rs_full.push_back(cur);
-  }
+  return 0.1;
+}
+
+int Router::UpdateQTable() const
+{
+  UpdateCurrentState();
+  //cout << "1" << endl;
+  int prev_action = ChooseAction(prev_state);
+  //cout << "2--" << prev_action << endl;
+  int cur_action = ChooseAction(cur_state);
+  //cout << "3--" << cur_action << endl;
+  _qtable[prev_state][prev_action] = (1 - RL_ALPHA) * _qtable[prev_state][prev_action] + RL_ALPHA * (LatencyInverse() + RL_GAMMA * _qtable[cur_state][cur_action]);
+  //cout << "4" << endl;
+  UpdatePreviousState();
+  for(unsigned int i = 0; i < _qtable[cur_state].size(); i++)
+    cout << _qtable[cur_state][i] << ", ";
+  cout << endl;
+  return cur_action;
+}
+
+void Router::InitializeQTable(int radix, int port_bins, vector<int> thresholds )
+{
+  vector<RouterState> rs_full;
+  RouterState first;
   
-  for(int i = 0; i < end; i++) {
-    
+  for (int i = 0; i < radix; i++)
+    {
+      prev_state.queue_length.push_back(0);
+      cur_state.queue_length.push_back(0);
+    }
+
+  GenerateStates(&rs_full, &first, 0, port_bins, radix);
+
+  for (unsigned int j = 0; j < rs_full.size(); j++) {
+    for(unsigned int i = 0; i < thresholds.size(); i++) {
+      _qtable[rs_full[j]].push_back(thresholds[i]);
+    }
+  }
+}
+
+void Router::GenerateStates(vector<RouterState>* rs_full, RouterState* cur_state, int cur_port, int port_bins, int radix )
+{
+  if (cur_port == radix) {
+    (*rs_full).push_back(*cur_state);
+    return;
+  }
+
+  for(int i = 0; i < port_bins; i++) {
+    (*cur_state).queue_length.push_back(i);
+    GenerateStates(rs_full, cur_state, cur_port+1, port_bins, radix);
+    (*cur_state).queue_length.pop_back();
   }
     
-} 
+}
+
+void Router::PrintQTable() const
+{
+  cout << "qtable" << endl;
+  for(std::map<RouterState, vector<double> >::iterator it = _qtable.begin(); it != _qtable.end(); ++it)
+    {
+      cout << "ports: ";
+      for(unsigned int i = 0; i < it->first.queue_length.size(); i++)
+	{
+	  cout << it->first.queue_length[i] << ", ";
+	}
+      cout << "rewards: ";
+      for(unsigned int i = 0; i < it->second.size(); i++)
+	{
+	  cout << it->second[i] << ", ";
+	}
+      cout << endl;
+      
+    }
+}
+
 void Router::AddInputChannel( FlitChannel *channel, CreditChannel *backchannel )
 {
   _input_channels.push_back( channel );

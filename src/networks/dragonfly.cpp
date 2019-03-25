@@ -36,9 +36,6 @@
 #include "globals.hpp"
 
 #define DRAGON_LATENCY
-#define RL_ALPHA 0.1 //learning rate
-#define RL_GAMMA 0.95 //discount rate
-
 int gP, gA, gG;
 
 //calculate the hop count between src and estination
@@ -235,7 +232,13 @@ void DragonFlyNew::_BuildNet( const Configuration &config )
   cout << " # of nodes ( size of network ) = " << _nodes << endl;
   cout << " # of groups (_g) = " << _g << endl;
   cout << " # of routers per group (_a) = " << _a << endl;
-
+  
+  vector<int> ugal_thresholds;
+  ugal_thresholds.push_back(1);
+  ugal_thresholds.push_back(1);
+  ugal_thresholds.push_back(1);
+  ugal_thresholds.push_back(1);
+  ugal_thresholds.push_back(1);
   for ( int node = 0; node < _num_of_switch; ++node ) {
     // ID of the group
     int grp_ID;
@@ -246,6 +249,8 @@ void DragonFlyNew::_BuildNet( const Configuration &config )
 
     _routers[node] = Router::NewRouter( config, this, router_name.str( ), 
 					node, _k, _k );
+    _routers[node]->InitializeQTable(_k, 3, ugal_thresholds);
+    _routers[node]->PrintQTable();
     _timed_modules.push_back(_routers[node]);
 
     router_name.str("");
@@ -565,11 +570,10 @@ void ugal_dragonflynew( const Router *r, const Flit *f, int in_channel,
 }
 
 //Reinforcement Learning based adaptive routign algorithm for the dragonfly
-void rl_dragonflynew( const Router *r, const Flit *f, int in_channel, 
+void rl_dragonflynew(const Router *r, const Flit *f, int in_channel, 
 			OutputSet *outputs, bool inject )
 {
   //need 3 VCs for deadlock freedom
-
   assert(gNumVCs==3);
   outputs->Clear( );
   if(inject) {
@@ -580,7 +584,7 @@ void rl_dragonflynew( const Router *r, const Flit *f, int in_channel,
   
   //this constant biases the adaptive decision toward minimum routing
   //negative value woudl biases it towards nonminimum routing
-  int adaptive_threshold = 0;
+  int adaptive_threshold = (r->UpdateQTable()-2) * 64;
 
   int _grp_num_routers= gA;
   int _grp_num_nodes =_grp_num_routers*gP;

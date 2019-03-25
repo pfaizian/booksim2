@@ -41,19 +41,21 @@
 typedef Channel<Credit> CreditChannel;
 struct RouterState
 {
-  Vector<int> queue_length;
-  int dst_grp;
-  bool operator<(const RouterState& rs) const
+  vector<int> queue_length;
+  //int dst_grp;
+  bool operator<(const RouterState rs) const
   { 
-    vector<int>::iterator ptr, ptr1;
+    vector<int>::const_iterator ptr, ptr1;
 
-    for(ptr = this.queue_length.begin(), ptr1 = rs.queue_length.begin(); 
-	/ptr < this.queue_length.end(); ptr++, ptr1++) {
+    for(ptr = this->queue_length.begin(), ptr1 = rs.queue_length.begin(); ptr < this->queue_length.end(); ptr++, ptr1++) {
+      if (*ptr > *ptr1)
+	return false;
       if (*ptr < *ptr1)
 	return true;
+      
     }
-    if (this.dst_grp < rs.dst_group)
-      return true;
+    //if (this.dst_grp < rs.dst_group)
+    //return true;
 
     return false;
   }
@@ -68,6 +70,11 @@ protected:
   static int const STALL_BUFFER_FULL;
   static int const STALL_BUFFER_RESERVED;
   static int const STALL_CROSSBAR_CONFLICT;
+  static double const RL_ALPHA;
+  static double const RL_GAMMA;
+  
+  mutable RouterState prev_state;
+  mutable RouterState cur_state;
 
   int _id;
   
@@ -90,7 +97,7 @@ protected:
   vector<FlitChannel *>   _output_channels;
   vector<CreditChannel *> _output_credits;
   vector<bool>            _channel_faults;
-  map<RouterState, vector<int> > _qtable; 
+  mutable map<RouterState, vector<double> > _qtable; 
 
 #ifdef TRACK_FLOWS
   vector<vector<int> > _received_flits;
@@ -134,7 +141,15 @@ public:
   virtual void ReadInputs( ) = 0;
   virtual void Evaluate( );
   virtual void WriteOutputs( ) = 0;
-
+  
+  int ChooseAction(RouterState state) const;
+  void UpdateCurrentState() const;
+  void UpdatePreviousState() const;
+  int UpdateQTable() const;
+  double LatencyInverse() const;
+  void InitializeQTable(int radix, int port_bins, vector<int> thresholds );
+  void GenerateStates(vector<RouterState>* rs_full, RouterState* cur_state, int cur_port, int port_bins, int radix );
+  void PrintQTable() const;
   void OutChannelFault( int c, bool fault = true );
   bool IsFaultyOutput( int c ) const;
 
